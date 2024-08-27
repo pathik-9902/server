@@ -1,11 +1,12 @@
 const express = require('express');
 const cors = require('cors');
 const WebSocket = require('ws');
+
 const app = express();
 const port = 4000;
 
 app.use(express.json());
-app.use(cors()); 
+app.use(cors());
 
 let lastTiltDetected = false;
 let lastAccidentDetected = false;
@@ -15,7 +16,7 @@ let sensorData = {
     gpsData: null,
     temperatureData: null,
     flameData: null,
-    adxlData: null
+    adxlData: null,
 };
 
 // Create a WebSocket server
@@ -69,7 +70,7 @@ app.post('/flame-alert', (req, res) => {
     }
 });
 
-// Endpoint to receive sensor data
+// Endpoint to receive ADXL sensor data (tilt and accident detection)
 app.post('/adxl-alert', (req, res) => {
     const { tiltDetected, accidentDetected } = req.body;
 
@@ -100,44 +101,6 @@ app.post('/adxl-alert', (req, res) => {
     }
 });
 
-// New endpoints to get each type of sensor data individually
-
-// Get GPS Data
-app.get('/gps-data', (req, res) => {
-    if (sensorData.gpsData) {
-        res.json(sensorData.gpsData);
-    } else {
-        res.status(404).send('No GPS data available');
-    }
-});
-
-// Get Temperature Data
-app.get('/temperature-data', (req, res) => {
-    if (sensorData.temperatureData) {
-        res.json(sensorData.temperatureData);
-    } else {
-        res.status(404).send('No temperature data available');
-    }
-});
-
-// Get Flame Data
-app.get('/flame-data', (req, res) => {
-    if (sensorData.flameData) {
-        res.json(sensorData.flameData);
-    } else {
-        res.status(404).send('No flame data available');
-    }
-});
-
-// Get ADXL Data
-app.get('/adxl-data', (req, res) => {
-    if (sensorData.adxlData) {
-        res.json(sensorData.adxlData);
-    } else {
-        res.status(404).send('No ADXL data available');
-    }
-});
-
 // Send updates to all WebSocket clients
 function sendUpdateToClients() {
     const message = JSON.stringify(sensorData);
@@ -146,13 +109,13 @@ function sendUpdateToClients() {
             client.send(message);
         }
     });
-    sensorData = {
-        gpsData: null,
-        temperatureData: null,
-        flameData: null,
-        adxlData: null
-    };
+    // No reset here; keep sensor data intact
 }
+
+// Endpoint to get all sensor data (For debugging or direct access)
+app.get('/sensor-data', (req, res) => {
+    res.json(sensorData);
+});
 
 // Upgrade the HTTP server to support WebSocket
 const server = app.listen(port, () => {
