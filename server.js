@@ -100,9 +100,42 @@ app.post('/adxl-alert', (req, res) => {
     }
 });
 
-// Endpoint to get all sensor data
-app.get('/sensor-data', (req, res) => {
-    res.json(sensorData);
+// New endpoints to get each type of sensor data individually
+
+// Get GPS Data
+app.get('/gps-data', (req, res) => {
+    if (sensorData.gpsData) {
+        res.json(sensorData.gpsData);
+    } else {
+        res.status(404).send('No GPS data available');
+    }
+});
+
+// Get Temperature Data
+app.get('/temperature-data', (req, res) => {
+    if (sensorData.temperatureData) {
+        res.json(sensorData.temperatureData);
+    } else {
+        res.status(404).send('No temperature data available');
+    }
+});
+
+// Get Flame Data
+app.get('/flame-data', (req, res) => {
+    if (sensorData.flameData) {
+        res.json(sensorData.flameData);
+    } else {
+        res.status(404).send('No flame data available');
+    }
+});
+
+// Get ADXL Data
+app.get('/adxl-data', (req, res) => {
+    if (sensorData.adxlData) {
+        res.json(sensorData.adxlData);
+    } else {
+        res.status(404).send('No ADXL data available');
+    }
 });
 
 // Send updates to all WebSocket clients
