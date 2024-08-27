@@ -10,6 +10,8 @@ app.use(cors());
 
 let lastTiltDetected = false;
 let lastAccidentDetected = false;
+let lastTemperatureTriggered = false;
+let lastFlameDetected = false;
 
 // In-memory store for the latest sensor data
 let sensorData = {
@@ -48,8 +50,18 @@ app.post('/gps-data', (req, res) => {
 app.post('/temperature-alert', (req, res) => {
     const { temperature } = req.body;
     if (temperature !== undefined) {
-        sensorData.temperatureData = { temperature };
-        console.log(`Temperature received: ${temperature}°C`);
+        // State change detection for temperature sensor
+        if (temperature !== 'normal') {
+            sensorData.temperatureData = { temperature };
+            lastTemperatureTriggered = true;
+            console.log(`Temperature received: ${temperature}°C`);
+        } else {
+            if (lastTemperatureTriggered) {
+                sensorData.temperatureData = { temperature: 'normal' };
+                lastTemperatureTriggered = false;
+                console.log('Temperature back to normal');
+            }
+        }
         sendUpdateToClients();
         res.status(200).send('Temperature data received');
     } else {
@@ -61,8 +73,18 @@ app.post('/temperature-alert', (req, res) => {
 app.post('/flame-alert', (req, res) => {
     const { flameDetected } = req.body;
     if (flameDetected !== undefined) {
-        sensorData.flameData = { flameDetected };
-        console.log(`Flame detected: ${flameDetected}`);
+        // State change detection for flame sensor
+        if (flameDetected) {
+            sensorData.flameData = { flameDetected };
+            lastFlameDetected = true;
+            console.log('Flame detected');
+        } else {
+            if (lastFlameDetected) {
+                sensorData.flameData = { flameDetected: false };
+                lastFlameDetected = false;
+                console.log('Flame no longer detected');
+            }
+        }
         sendUpdateToClients();
         res.status(200).send('Flame detection data received');
     } else {
@@ -83,6 +105,10 @@ app.post('/adxl-alert', (req, res) => {
             status = 'impact';
         } else if (tiltDetected && accidentDetected && (!lastTiltDetected || !lastAccidentDetected)) {
             status = 'both';
+        } else if (!tiltDetected && lastTiltDetected) {
+            status = 'tilt-normal';
+        } else if (!accidentDetected && lastAccidentDetected) {
+            status = 'impact-normal';
         }
 
         lastTiltDetected = tiltDetected;
@@ -90,7 +116,7 @@ app.post('/adxl-alert', (req, res) => {
 
         if (status !== 'none') {
             sensorData.adxlData = { status };
-            console.log(`Collision: ${status}`);
+            console.log(`Collision status: ${status}`);
             sendUpdateToClients();
             res.json({ status });
         } else {
