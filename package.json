@@ -1,0 +1,15 @@
+{
+    "name": "my-node-server-app",
+    "version": "1.0.0",
+    "description": "Node.js server with Express, WebSocket, and REST API",
+    "main": "server.js",
+    "scripts": {
+      "start": "node server.js"
+    },
+    "dependencies": {
+      "express": "^4.17.1",
+      "cors": "^2.8.5",
+      "ws": "^8.2.2"
+    }
+  }
+  
