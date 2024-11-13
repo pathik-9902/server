@@ -12,6 +12,7 @@ let lastTiltDetected = false;
 let lastAccidentDetected = false;
 let lastTemperatureTriggered = false;
 let lastFlameDetected = false;
+let lastRFIDDetected = null; // Variable to track the last RFID tag ID
 
 // In-memory store for the latest sensor data
 let sensorData = {
@@ -19,6 +20,7 @@ let sensorData = {
     temperatureData: null,
     flameData: null,
     adxlData: null,
+    rfidData: null,
 };
 
 // Create a WebSocket server
@@ -27,10 +29,18 @@ const wss = new WebSocket.Server({ noServer: true });
 // Handle WebSocket connections
 wss.on('connection', (ws) => {
     console.log('Client connected via WebSocket');
-    ws.on('message', (message) => {
-        console.log(`Received message: ${message}`);
-    });
+    ws.on('close', () => console.log('Client disconnected'));
 });
+
+// Helper function to broadcast updates to WebSocket clients
+function sendUpdateToClients() {
+    const message = JSON.stringify(sensorData);
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    });
+}
 
 // Route to handle GPS data
 app.post('/gps-data', (req, res) => {
@@ -38,7 +48,7 @@ app.post('/gps-data', (req, res) => {
 
     if (latitude !== undefined && longitude !== undefined && altitude !== undefined && speed !== undefined) {
         sensorData.gpsData = { latitude, longitude, altitude, speed };
-        console.log(`Lat: ${latitude}, Lon: ${longitude}, Alt: ${altitude}, Speed: ${speed}`);
+        console.log(`GPS Data - Lat: ${latitude}, Lon: ${longitude}, Alt: ${altitude}, Speed: ${speed}`);
         sendUpdateToClients();
         res.status(200).send('GPS Data received');
     } else {
@@ -49,18 +59,16 @@ app.post('/gps-data', (req, res) => {
 // Endpoint to receive temperature data
 app.post('/temperature-alert', (req, res) => {
     const { temperature } = req.body;
+
     if (temperature !== undefined) {
-        // State change detection for temperature sensor
-        if (temperature !== 'normal') {
+        if (temperature !== 'normal' && !lastTemperatureTriggered) {
             sensorData.temperatureData = { temperature };
             lastTemperatureTriggered = true;
-            console.log(`Temperature received: ${temperature}°C`);
-        } else {
-            if (lastTemperatureTriggered) {
-                sensorData.temperatureData = { temperature: 'normal' };
-                lastTemperatureTriggered = false;
-                console.log('Temperature back to normal');
-            }
+            console.log(`Temperature Alert: ${temperature}°C`);
+        } else if (temperature === 'normal' && lastTemperatureTriggered) {
+            sensorData.temperatureData = { temperature: 'normal' };
+            lastTemperatureTriggered = false;
+            console.log('Temperature normalized');
         }
         sendUpdateToClients();
         res.status(200).send('Temperature data received');
@@ -72,18 +80,16 @@ app.post('/temperature-alert', (req, res) => {
 // Endpoint to receive flame detection status
 app.post('/flame-alert', (req, res) => {
     const { flameDetected } = req.body;
-    if (flameDetected !== undefined) {
-        // State change detection for flame sensor
-        if (flameDetected) {
+
+    if (typeof flameDetected === 'boolean') {
+        if (flameDetected && !lastFlameDetected) {
             sensorData.flameData = { flameDetected };
             lastFlameDetected = true;
             console.log('Flame detected');
-        } else {
-            if (lastFlameDetected) {
-                sensorData.flameData = { flameDetected: false };
-                lastFlameDetected = false;
-                console.log('Flame no longer detected');
-            }
+        } else if (!flameDetected && lastFlameDetected) {
+            sensorData.flameData = { flameDetected: false };
+            lastFlameDetected = false;
+            console.log('Flame no longer detected');
         }
         sendUpdateToClients();
         res.status(200).send('Flame detection data received');
@@ -95,7 +101,6 @@ app.post('/flame-alert', (req, res) => {
 // Endpoint to receive ADXL sensor data (tilt and accident detection)
 app.post('/adxl-alert', (req, res) => {
     const { tiltDetected, accidentDetected } = req.body;
-
     let status = 'none';
 
     if (tiltDetected !== undefined || accidentDetected !== undefined) {
@@ -116,7 +121,7 @@ app.post('/adxl-alert', (req, res) => {
 
         if (status !== 'none') {
             sensorData.adxlData = { status };
-            console.log(`Collision status: ${status}`);
+            console.log(`Collision status updated: ${status}`);
             sendUpdateToClients();
             res.json({ status });
         } else {
@@ -127,18 +132,26 @@ app.post('/adxl-alert', (req, res) => {
     }
 });
 
-// Send updates to all WebSocket clients
-function sendUpdateToClients() {
-    const message = JSON.stringify(sensorData);
-    wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(message);
-        }
-    });
-    // No reset here; keep sensor data intact
-}
+// Endpoint to handle RFID data
+app.post('/rfid-alert', (req, res) => {
+    const { rfidTagId } = req.body;
 
-// Endpoint to get all sensor data (For debugging or direct access)
+    if (rfidTagId !== undefined) {
+        if (rfidTagId !== lastRFIDDetected) {
+            sensorData.rfidData = { rfidTagId };
+            lastRFIDDetected = rfidTagId;
+            console.log(`RFID Tag Detected: ${rfidTagId}`);
+            sendUpdateToClients();
+            res.status(200).send('RFID data received');
+        } else {
+            res.status(200).send('RFID tag already detected');
+        }
+    } else {
+        res.status(400).send('Invalid RFID data');
+    }
+});
+
+// Endpoint to get all sensor data (for debugging or direct access)
 app.get('/sensor-data', (req, res) => {
     res.json(sensorData);
 });
@@ -155,6 +168,6 @@ server.on('upgrade', (request, socket, head) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-    console.error(err.stack);
+    console.error('Internal error:', err.stack);
     res.status(500).send('Something broke!');
 });
